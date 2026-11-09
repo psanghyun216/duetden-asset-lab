@@ -124,9 +124,9 @@ export const LAB_TOUCH_PX = 12;
 /**
  * 손목선(2026-11-09 사용자: 원형 말고 손과 손목 경계에 일자 선). 남녀 바디 손 자리가 같아 한 벌.
  * 왼손: 손등 윗선 꺾이는 점 (348,640) ↔ 아랫선 (374,666) 을 잇는 선(팔과 직각) 바깥 = x - y < -292
- * 오른손: (652,640) ↔ (626,666) 바깥 = x + y > 1292. 손 근처(y600~730, 왼 x<420·오 x>580)에서만 본다.
+ * 오른손: (652,640) ↔ (626,666) 바깥 = x + y > 1292. 손 근처(y600~730, 왼 x<386·오 x>614, 몸통·다리가 안 걸리게)에서만 본다.
  */
-export const LAB_WRIST = { left: -292, right: 1292, leftXMax: 420, rightXMin: 580, yMin: 600, yMax: 730 };
+export const LAB_WRIST = { left: -292, right: 1292, leftXMax: 386, rightXMin: 614, yMin: 600, yMax: 730 };
 /** 신발은 발보다 크게 그리는 게 보통이라 옆·앞으로는 넉넉히, 바닥 아래로는 LAB_SOLE_PX 까지만 */
 export const LAB_SHOE_OUT_PX = 40;
 export const LAB_SOLE_PX = 16;
