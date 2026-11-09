@@ -41,3 +41,13 @@ body[data-bg=check] #stage { background:repeating-conic-gradient(#ddd 0 25%, #ff
 .mini.danger { color:var(--bad); }
 .hint { font-size:13px; color:var(--sub); margin:0; }
 button { cursor:pointer; font-family:inherit; }
+.drop-hint { display:none; margin-left:8px; font-size:12px; font-weight:400; color:var(--accent); }
+body.dragging .drop-hint { display:inline; }
+body.dragging .slot, body.dragging .file { outline:2px dashed #f0b8a8; outline-offset:2px; }
+.drop-over { outline:3px solid var(--accent) !important; background:#fdebe5 !important; }
+@media (min-width:860px) {
+  main { max-width:1400px; grid-template-columns:minmax(420px, 46vw) 1fr; }
+  .stage-wrap { max-height:calc(100vh - 80px); display:flex; flex-direction:column; }
+  #stage { height:calc(100vh - 190px); width:auto; max-width:100%; }
+  #slots { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+}

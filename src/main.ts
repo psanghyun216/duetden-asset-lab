@@ -296,8 +296,8 @@ function render() {
       ].join('') : '';
       return `<div class="result">${lines}</div>`;
     }).join('');
-    const buttons = SLOT_KEYS[slot].map(({ key, label }) => `<label class="file">📎 ${label}<input type="file" accept="image/png,image/webp,image/jpeg" data-attach="${slot}" data-key="${key}"></label>`).join('');
-    return `<section class="slot"><h2>${SLOT_LABEL[slot]}</h2><div class="chips">${chips}</div><div class="files">${buttons}</div>${detail}</section>`;
+    const buttons = SLOT_KEYS[slot].map(({ key, label }) => `<label class="file" data-drop-slot="${slot}" data-drop-key="${key}">📎 ${label}<input type="file" accept="image/png,image/webp,image/jpeg" data-attach="${slot}" data-key="${key}"></label>`).join('');
+    return `<section class="slot" data-drop-slot="${slot}"><h2>${SLOT_LABEL[slot]}<span class="drop-hint">여기에 끌어다 놓기</span></h2><div class="chips">${chips}</div><div class="files">${buttons}</div>${detail}</section>`;
   }).join('');
   scheduleDraw();
 }
@@ -325,6 +325,51 @@ document.addEventListener('change', (e) => {
   if (t.id === 'showbad') { state.showBad = t.checked; render(); }
 });
 window.addEventListener('resize', scheduleDraw);
+
+// ---------- 끌어다 놓기(PC) ----------
+/**
+ * - 칸의 첨부 버튼 위: 그 그림(앞머리·뒷머리·뜬 눈…)으로
+ * - 칸(상자) 위: 상의·하의·신발은 그 칸에, 헤어는 이름이 hair-front_/hair-back_ 이면 그쪽, 아니면 앞뒤 한 장, 표정은 _closed 면 감은 눈
+ * - 그 밖(캐릭터 그림·빈 곳): 파일 이름 규칙대로(hair_…_f.png, top_…_u.png). 이름이 규칙에 없으면 안내만
+ */
+const imageFiles = (dt: DataTransfer | null) => [...(dt?.files ?? [])].filter((f) => /^image\//.test(f.type) || /\.(png|webp|jpe?g)$/i.test(f.name));
+function keyFor(slot: SdSlot, file: File): SdFileKey {
+  const info = parseSdFileName(file.name);
+  if (info && info.slot === slot) return info.key;
+  return slot === 'hair' ? 'whole' : slot === 'expression' ? (/_closed/i.test(file.name) ? 'closed' : 'open') : 'art';
+}
+let dragDepth = 0;
+const clearHover = () => document.querySelectorAll('.drop-over').forEach((e) => e.classList.remove('drop-over'));
+document.addEventListener('dragenter', (e) => { if (!e.dataTransfer?.types.includes('Files')) return; dragDepth++; document.body.classList.add('dragging'); });
+document.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove('dragging'); clearHover(); } });
+document.addEventListener('dragover', (e) => {
+  if (!e.dataTransfer?.types.includes('Files')) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+  clearHover();
+  const key = (e.target as HTMLElement).closest('[data-drop-key]');
+  (key ?? (e.target as HTMLElement).closest('[data-drop-slot]'))?.classList.add('drop-over');
+});
+document.addEventListener('drop', (e) => {
+  if (!e.dataTransfer?.types.includes('Files')) return;
+  e.preventDefault();
+  dragDepth = 0;
+  document.body.classList.remove('dragging');
+  clearHover();
+  const files = imageFiles(e.dataTransfer);
+  if (!files.length) return;
+  const keyEl = (e.target as HTMLElement).closest<HTMLElement>('[data-drop-key]');
+  const slotEl = (e.target as HTMLElement).closest<HTMLElement>('[data-drop-slot]');
+  if (keyEl) { attach(keyEl.dataset.dropSlot as SdSlot, keyEl.dataset.dropKey as SdFileKey, files[0]); render(); return; }
+  if (slotEl) {
+    const slot = slotEl.dataset.dropSlot as SdSlot;
+    // 헤어 앞·뒤나 표정 뜬 눈·감은 눈을 같이 놓으면 같은 아이템으로 묶는다
+    for (const f of files.slice(0, slot === 'hair' || slot === 'expression' ? 2 : 1)) attach(slot, keyFor(slot, f), f);
+    render();
+    return;
+  }
+  attachByName(files);
+});
 
 // ---------- 시작 ----------
 const kitsReady = loadKits('kit', { male: { url: BODY_FILES['body_m.png'], x: SD_BUNDLED.rects['body_m.png'].x, y: SD_BUNDLED.rects['body_m.png'].y }, female: { url: BODY_FILES['body_f.png'], x: SD_BUNDLED.rects['body_f.png'].x, y: SD_BUNDLED.rects['body_f.png'].y } }).then((k) => { state.kits = k; }, (e) => { state.kitsError = (e as Error).message; render(); });

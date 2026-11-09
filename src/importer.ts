@@ -116,11 +116,17 @@ export async function loadKits(base: string, bodies: Record<SdSex, BodyArt>): Pr
 /**
  * 랩 규칙(2026-11-09 사용자). 앱 키트에는 아직 없음.
  * - 상의·하의: 옆으로 퍼지는 건 괜찮다. 원래 위아래 길이 안에서 가로 끝까지 그려도 되고, 손만 가리면 안 된다.
- *   손 = 키트 손 영역 중 실제 바디 그림이 있는 픽셀(외곽선 포함, 여유 없음). 경계 번짐만큼(LAB_TOUCH_PX)은 닿아도 통과.
+ *   손 = 손목선(LAB_WRIST, 일자) 바깥의 실제 바디 그림 픽셀(외곽선 포함, 여유 없음). 경계 번짐만큼(LAB_TOUCH_PX)은 닿아도 통과.
  *   팔 살이 보이는지(몸 폭·소매 틈)는 앱 검사 그대로.
  * - 신발: 실제 발 그림(발목선 아래, 외곽선 포함)을 빈틈 없이 덮어야 하고, 발 옆·앞으로 LAB_SHOE_OUT_PX, 바닥 아래로 LAB_SOLE_PX 까지만.
  */
 export const LAB_TOUCH_PX = 12;
+/**
+ * 손목선(2026-11-09 사용자: 원형 말고 손과 손목 경계에 일자 선). 남녀 바디 손 자리가 같아 한 벌.
+ * 왼손: 손등 윗선 꺾이는 점 (348,640) ↔ 아랫선 (374,666) 을 잇는 선(팔과 직각) 바깥 = x - y < -292
+ * 오른손: (652,640) ↔ (626,666) 바깥 = x + y > 1292. 손 근처(y600~730, 왼 x<420·오 x>580)에서만 본다.
+ */
+export const LAB_WRIST = { left: -292, right: 1292, leftXMax: 420, rightXMin: 580, yMin: 600, yMax: 730 };
 /** 신발은 발보다 크게 그리는 게 보통이라 옆·앞으로는 넉넉히, 바닥 아래로는 LAB_SOLE_PX 까지만 */
 export const LAB_SHOE_OUT_PX = 40;
 export const LAB_SOLE_PX = 16;
@@ -152,7 +158,11 @@ function dilate(m: Uint8Array, r: number): Uint8Array {
 async function labRules(spec: SdKitSpec, masks: Record<string, Uint8Array>, art: BodyArt) {
   const body = await bodyAlpha(art, 128);
   const solid = await bodyAlpha(art, 200);
-  const hand = and(masks['masks/body-hands.png'], body);
+  const hand = new Uint8Array(SD_W * SD_H);
+  for (let y = LAB_WRIST.yMin; y < LAB_WRIST.yMax; y++) for (let x = 0; x < SD_W; x++) {
+    const p = y * SD_W + x;
+    if (body[p] && ((x < LAB_WRIST.leftXMax && x - y < LAB_WRIST.left) || (x > LAB_WRIST.rightXMin && x + y > LAB_WRIST.right))) hand[p] = 1;
+  }
   const foot = and(masks['masks/body-feet.png'], solid);
   masks['lab/hand.png'] = hand;
   masks['lab/foot.png'] = foot;
