@@ -95,7 +95,7 @@ export function applySdFit(rgba: Rgba, fit: SdFit): Rgba {
 }
 
 /** 키트(남녀 spec.json + 마스크) 읽기 */
-export async function loadKits(base: string): Promise<SdKits> {
+export async function loadKits(base: string, bodies: Record<SdSex, BodyArt>): Promise<SdKits> {
   const read = async (sex: (typeof SD_SEXES)[number]): Promise<SdKit> => {
     const spec = (await (await fetch(`${base}/${sex}/spec.json`)).json()) as SdKitSpec;
     const masks: Record<string, Uint8Array> = {};
@@ -106,8 +106,7 @@ export async function loadKits(base: string): Promise<SdKits> {
       for (let p = 0; p < m.length; p++) m[p] = data[p * 4] > 127 ? 1 : 0;
       masks[rel] = m;
     }));
-    widenZone(spec, masks, 'bottom');
-    widenZone(spec, masks, 'top');
+    await labRules(spec, masks, bodies[sex]);
     return { sex, spec, masks };
   };
   const [male, female] = await Promise.all([read('male'), read('female')]);
@@ -115,31 +114,71 @@ export async function loadKits(base: string): Promise<SdKits> {
 }
 
 /**
- * 랩 규칙(2026-11-09 사용자): 하의·상의는 옆으로 퍼지는 건 괜찮고 손만 가리면 안 된다(상의는 팔에 살이 보이면 안 됨 = 몸 폭·소매 틈 검사는 그대로).
- * 그 칸의 '그려도 되는 범위'를 원래 위아래 길이 안에서 가로로 끝까지 넓히고, 손(+여유 6px)만 뺀다. 앱 키트에는 아직 없음.
+ * 랩 규칙(2026-11-09 사용자). 앱 키트에는 아직 없음.
+ * - 상의·하의: 옆으로 퍼지는 건 괜찮다. 원래 위아래 길이 안에서 가로 끝까지 그려도 되고, 손만 가리면 안 된다.
+ *   손 = 키트 손 영역 중 실제 바디 그림이 있는 픽셀(외곽선 포함, 여유 없음). 경계 번짐만큼(LAB_TOUCH_PX)은 닿아도 통과.
+ *   팔 살이 보이는지(몸 폭·소매 틈)는 앱 검사 그대로.
+ * - 신발: 실제 발 그림(발목선 아래, 외곽선 포함)을 빈틈 없이 덮어야 하고, 발 옆·앞으로 LAB_SHOE_OUT_PX, 바닥 아래로 LAB_SOLE_PX 까지만.
  */
-export const LAB_HAND_MARGIN = 6;
-function widenZone(spec: SdKitSpec, masks: Record<string, Uint8Array>, slot: 'top' | 'bottom') {
-  const rel = spec.zones[slot]?.max;
-  const max = rel ? masks[rel] : undefined;
-  const hands = masks['masks/body-hands.png'];
-  if (!max || !hands) return;
-  let y0 = SD_H, y1 = -1;
-  for (let p = 0; p < max.length; p++) if (max[p]) { const y = (p / SD_W) | 0; if (y < y0) y0 = y; if (y > y1) y1 = y; }
-  const out = new Uint8Array(max.length);
-  for (let y = y0; y <= y1; y++) out.fill(1, y * SD_W, (y + 1) * SD_W);
-  const m = LAB_HAND_MARGIN;
-  for (let p = 0; p < hands.length; p++) {
-    if (!hands[p]) continue;
+export const LAB_TOUCH_PX = 12;
+/** 신발은 발보다 크게 그리는 게 보통이라 옆·앞으로는 넉넉히, 바닥 아래로는 LAB_SOLE_PX 까지만 */
+export const LAB_SHOE_OUT_PX = 40;
+export const LAB_SOLE_PX = 16;
+export type BodyArt = { url: string; x: number; y: number };
+
+async function bodyAlpha(art: BodyArt, min: number): Promise<Uint8Array> {
+  const { data, w, h } = await decode(await (await fetch(art.url)).blob());
+  const out = new Uint8Array(SD_W * SD_H);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const tx = x + art.x, ty = y + art.y;
+    if (tx < SD_W && ty < SD_H && data[(y * w + x) * 4 + 3] >= min) out[ty * SD_W + tx] = 1;
+  }
+  return out;
+}
+const and = (a: Uint8Array, b: Uint8Array) => a.map((v, i) => v & b[i]);
+function dilate(m: Uint8Array, r: number): Uint8Array {
+  const out = new Uint8Array(m.length);
+  for (let p = 0; p < m.length; p++) {
+    if (!m[p]) continue;
     const x = p % SD_W, y = (p - x) / SD_W;
-    for (let dy = -m; dy <= m; dy++) for (let dx = -m; dx <= m; dx++) {
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
       const qx = x + dx, qy = y + dy;
-      if (qx >= 0 && qy >= 0 && qx < SD_W && qy < SD_H && dx * dx + dy * dy <= m * m) out[qy * SD_W + qx] = 0;
+      if (qx >= 0 && qy >= 0 && qx < SD_W && qy < SD_H && dx * dx + dy * dy <= r * r) out[qy * SD_W + qx] = 1;
     }
   }
-  // 범위 마스크는 하의 칸만 쓰므로 새 이름으로 바꿔 끼운다(다른 칸은 영향 없음)
-  masks[`lab/${slot}_max.png`] = out;
-  spec.zones[slot] = { ...spec.zones[slot], max: `lab/${slot}_max.png` };
+  return out;
+}
+
+async function labRules(spec: SdKitSpec, masks: Record<string, Uint8Array>, art: BodyArt) {
+  const body = await bodyAlpha(art, 128);
+  const solid = await bodyAlpha(art, 200);
+  const hand = and(masks['masks/body-hands.png'], body);
+  const foot = and(masks['masks/body-feet.png'], solid);
+  masks['lab/hand.png'] = hand;
+  masks['lab/foot.png'] = foot;
+  for (const slot of ['top', 'bottom'] as const) {
+    const max = masks[spec.zones[slot].max];
+    let y0 = SD_H, y1 = -1;
+    for (let p = 0; p < max.length; p++) if (max[p]) { const y = (p / SD_W) | 0; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    const out = new Uint8Array(max.length);
+    for (let y = y0; y <= y1; y++) out.fill(1, y * SD_W, (y + 1) * SD_W);
+    masks[`lab/${slot}_max.png`] = out;
+    spec.zones[slot] = { ...spec.zones[slot], max: `lab/${slot}_max.png`, nogo: 'lab/hand.png', touch_tolerance_px: LAB_TOUCH_PX };
+  }
+  const shoeMax = dilate(foot, LAB_SHOE_OUT_PX);
+  const old = masks[spec.zones.shoes.max];
+  // 양말은 발목 위 다리로 올라가도 된다(앱 신발 범위 그대로) + 발 바깥 15px
+  const sole = spec.lines_y.ground + LAB_SOLE_PX;
+  for (let p = 0; p < shoeMax.length; p++) shoeMax[p] = (shoeMax[p] && p < (sole + 1) * SD_W ? 1 : 0) | old[p];
+  masks['lab/shoes_max.png'] = shoeMax;
+  spec.zones.shoes = { ...spec.zones.shoes, max: 'lab/shoes_max.png', must: 'lab/foot.png' };
+}
+
+/** 랩 규칙 문장으로 바꾸기 */
+export function labMessage(slot: SdKitSlot, msg: string): string {
+  if (slot === 'top' || slot === 'bottom') return msg.replace('금지 구역(빨강 빗금) 침범', '손을 가림');
+  if (slot === 'shoes') return msg.replace('반드시 가릴 곳(옅은 칠)이 비어 있음', '발이 덜 덮임').replace('그려도 되는 범위(점선) 밖', `신발 범위(발 옆 ${LAB_SHOE_OUT_PX}px·바닥 아래 ${LAB_SOLE_PX}px) 밖`);
+  return msg;
 }
 
 export type ImportResult = {
@@ -208,7 +247,8 @@ export async function importItem(kits: SdKits, slot: SdKitSlot, sex: SdItemSex, 
   // 크게(또는 작게·엉뚱한 자리에) 그린 그림: 기본 맞춤(±5%·±48px)으로 안 맞으면 칸 기준선에 크기·자리를 먼저 잡고 다시 맞춰 본다
   if (autoFit && best.check.problems.some((p) => p.rule === 'max' || p.rule === 'must' || p.rule === 'nogo')) {
     const guess = prePlacement(kits, slot, sexes, raw, threshold);
-    if (guess) {
+    // 크기 차이가 15% 안쪽이면 그림 문제(모양)로 보고 키우거나 줄이지 않는다
+    if (guess && Math.abs(guess.s - 1) > 0.15) {
       const second = attempt(raw.map((r) => placeRgba(r, guess)));
       if (second.badPx < best.badPx) { best = second; pre = guess; }
     }
@@ -220,11 +260,11 @@ export async function importItem(kits: SdKits, slot: SdKitSlot, sex: SdItemSex, 
   const moved = fitText(fit);
   if (moved) notes.push(moved);
   notes.push(...extra);
-  problems.push(...check.problems.map((p) => p.message));
+  problems.push(...check.problems.map((p) => labMessage(slot, p.message)));
   if (autoFit && check.problems.some((p) => p.rule === 'max' || p.rule === 'nogo' || p.rule === 'must')) {
     notes.push(`자동으로 옮기고 크기를 바꿔도 구역에 다 맞지 않았어요. 도안 구역에 맞춰 다시 그려 주세요`);
   }
-  notes.push(...check.notes);
+  notes.push(...check.notes.map((n) => labMessage(slot, n)));
   const layers: Partial<Record<SdFileKey, Rgba>> = {};
   keys.forEach((k, i) => { layers[k] = placed[i]; });
   return { ok: problems.length === 0, layers, problems, notes, bad: check.bad.some(Boolean) ? check.bad : null, fit };
@@ -280,7 +320,7 @@ function prePlacement(kits: SdKits, slot: SdKitSlot, sexes: readonly SdSex[], la
   }
   if (slot === 'shoes') {
     const feet = bbox(k.masks['masks/body-feet.png']) ?? [419, 872, 582, 917];
-    const s = (feet[2] - feet[0] + 16) / w;
+    const s = (feet[2] - feet[0] + 60) / w;
     return at(s, cx, y1, (feet[0] + feet[2]) / 2, L.ground + 6, '발 폭');
   }
   if (slot === 'hair') {

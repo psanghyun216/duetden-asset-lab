@@ -327,7 +327,7 @@ document.addEventListener('change', (e) => {
 window.addEventListener('resize', scheduleDraw);
 
 // ---------- 시작 ----------
-const kitsReady = loadKits('kit').then((k) => { state.kits = k; }, (e) => { state.kitsError = (e as Error).message; render(); });
+const kitsReady = loadKits('kit', { male: { url: BODY_FILES['body_m.png'], x: SD_BUNDLED.rects['body_m.png'].x, y: SD_BUNDLED.rects['body_m.png'].y }, female: { url: BODY_FILES['body_f.png'], x: SD_BUNDLED.rects['body_f.png'].x, y: SD_BUNDLED.rects['body_f.png'].y } }).then((k) => { state.kits = k; }, (e) => { state.kitsError = (e as Error).message; render(); });
 
 async function loadRemote() {
   try {
