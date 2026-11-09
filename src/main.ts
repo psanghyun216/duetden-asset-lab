@@ -1,6 +1,6 @@
 import { SD_BUNDLED } from './app/catalog.generated.ts';
 import { cleanSdRemote, emptySdItems, mergeSdCatalog, SD_SLOTS, type SdCatalogData, type SdItemSex, type SdItems, type SdRect, type SdSex, type SdSlot } from './app/sdCatalog.ts';
-import { resolveSd, sdAvailable, sdLayers, SD_FIELDS, SD_VIEWS, sdUsable } from './app/sdModel.ts';
+import { resolveSd, sdAvailable, SD_FIELDS, SD_VIEWS, sdUsable } from './app/sdModel.ts';
 import { parseSdFileName, sdFileName, type SdFileKey, type SdKits } from './app/sdKit.ts';
 import source from './app/source.json';
 import type { Appearance } from './domain/appearance.ts';
@@ -22,6 +22,18 @@ const SLOT_KEYS: Record<SdSlot, { key: SdFileKey; label: string }[]> = {
 };
 const SEX_LABEL: Record<SdItemSex, string> = { male: '남', female: '여', unisex: '공용' };
 const VIEW_LABEL: Record<keyof typeof SD_VIEWS, string> = { full: '전신', hair: '머리', expression: '얼굴', top: '상의', bottom: '하의', shoes: '신발' };
+
+/**
+ * 랩 겹치는 순서(2026-11-09 사용자): 뒷머리 → 바디 → (표정) → 앞머리 → 신발(양말) → 하의 → 상의.
+ * 앱(sdModel SD_LAYER_ORDER)은 아직 뒷머리 → 바디 → 표정 → 신발 → 하의 → 상의 → 앞머리.
+ * 표정은 얼굴 살갗이라 바디 바로 위에 둔다.
+ */
+const LAB_LAYER_ORDER = ['hairBack', 'body', 'face', 'hairFront', 'shoes', 'bottom', 'top'] as const;
+function sdLayers(look: ReturnType<typeof resolveSd>, eyes: 'open' | 'closed'): string[] {
+  const face = eyes === 'closed' && look.eyesClosed ? look.eyesClosed : look.eyesOpen;
+  const at = { hairBack: look.hairBack, body: look.body, face, shoes: look.shoes, bottom: look.bottom, top: look.top, hairFront: look.hairFront };
+  return LAB_LAYER_ORDER.map((k) => at[k]).filter((f): f is string => !!f);
+}
 
 // ---------- 상태 ----------
 type Upload = {

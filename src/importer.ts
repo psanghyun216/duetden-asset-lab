@@ -106,7 +106,8 @@ export async function loadKits(base: string): Promise<SdKits> {
       for (let p = 0; p < m.length; p++) m[p] = data[p * 4] > 127 ? 1 : 0;
       masks[rel] = m;
     }));
-    widenBottom(spec, masks);
+    widenZone(spec, masks, 'bottom');
+    widenZone(spec, masks, 'top');
     return { sex, spec, masks };
   };
   const [male, female] = await Promise.all([read('male'), read('female')]);
@@ -114,12 +115,12 @@ export async function loadKits(base: string): Promise<SdKits> {
 }
 
 /**
- * 랩 규칙(2026-11-09 사용자): 하의는 옆으로 퍼지는 건 괜찮고 손만 가리면 안 된다.
- * 하의 '그려도 되는 범위'를 원래 위아래 길이 안에서 가로로 끝까지 넓히고, 손(+여유 6px)만 뺀다. 앱 키트에는 아직 없음.
+ * 랩 규칙(2026-11-09 사용자): 하의·상의는 옆으로 퍼지는 건 괜찮고 손만 가리면 안 된다(상의는 팔에 살이 보이면 안 됨 = 몸 폭·소매 틈 검사는 그대로).
+ * 그 칸의 '그려도 되는 범위'를 원래 위아래 길이 안에서 가로로 끝까지 넓히고, 손(+여유 6px)만 뺀다. 앱 키트에는 아직 없음.
  */
 export const LAB_HAND_MARGIN = 6;
-function widenBottom(spec: SdKitSpec, masks: Record<string, Uint8Array>) {
-  const rel = spec.zones.bottom?.max;
+function widenZone(spec: SdKitSpec, masks: Record<string, Uint8Array>, slot: 'top' | 'bottom') {
+  const rel = spec.zones[slot]?.max;
   const max = rel ? masks[rel] : undefined;
   const hands = masks['masks/body-hands.png'];
   if (!max || !hands) return;
@@ -137,8 +138,8 @@ function widenBottom(spec: SdKitSpec, masks: Record<string, Uint8Array>) {
     }
   }
   // 범위 마스크는 하의 칸만 쓰므로 새 이름으로 바꿔 끼운다(다른 칸은 영향 없음)
-  masks['lab/bottom_max.png'] = out;
-  spec.zones.bottom = { ...spec.zones.bottom, max: 'lab/bottom_max.png' };
+  masks[`lab/${slot}_max.png`] = out;
+  spec.zones[slot] = { ...spec.zones[slot], max: `lab/${slot}_max.png` };
 }
 
 export type ImportResult = {
