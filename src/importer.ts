@@ -25,6 +25,7 @@ import {
   type SdKitSlot,
   type SdKitSpec,
   type SdLayerAlpha,
+  type SdSex,
 } from './app/sdKit.ts';
 
 export type Rgba = Uint8Array;
@@ -143,34 +144,124 @@ export async function importItem(kits: SdKits, slot: SdKitSlot, sex: SdItemSex, 
 
   const canvas = new Map<SdFileKey, { rgba: Rgba; notes: string[] }>();
   for (const k of keys) canvas.set(k, await toSdCanvas(files[k]!));
-  const moving: SdLayerAlpha[] = keys.map((k) => ({ alpha: alphaMask(canvas.get(k)!.rgba, threshold), front: k !== 'back' }));
-  const fit = autoFit ? fitSdLayers(kits, slot, moving, sexes).fit : { scale: 1, dx: 0, dy: 0 };
-  let placed = keys.map((k) => applySdFit(canvas.get(k)!.rgba, fit));
-  const moved = fitText(fit);
-  if (moved) notes.push(moved);
   for (const k of keys) for (const n of canvas.get(k)!.notes) notes.push(`${KEY_LABEL[k]}: ${n}`);
 
-  if (keys[0] === 'whole') {
-    const chin = Math.min(...sexes.map((x) => kits[x].spec.lines_y.chin));
-    const { front, back } = splitSdHair(placed[0], chin);
-    const hasBack = back.some((v, i) => i % 4 === 3 && v >= threshold);
-    keys = hasBack ? ['front', 'back'] : ['front'];
-    placed = hasBack ? [front, back] : [front];
-    notes.push(`앞뒤 한 장을 턱선(y${chin})에서 나눴어요: 위 = 앞머리, 아래 = 뒷머리(어깨·팔 뒤)`);
+  /** 맞추기 → (한 장 헤어 나누기·눈 맞춤) → 검사. src = 1000 캔버스 그림들(keys 순서) */
+  const attempt = (src: Rgba[]) => {
+    let ks = [...keys];
+    const moving: SdLayerAlpha[] = ks.map((k, i) => ({ alpha: alphaMask(src[i], threshold), front: k !== 'back' }));
+    const fit = autoFit ? fitSdLayers(kits, slot, moving, sexes).fit : { scale: 1, dx: 0, dy: 0 };
+    let placed = src.map((r) => applySdFit(r, fit));
+    const extra: string[] = [];
+    if (ks[0] === 'whole') {
+      const chin = Math.min(...sexes.map((x) => kits[x].spec.lines_y.chin));
+      const { front, back } = splitSdHair(placed[0], chin);
+      const hasBack = back.some((v, i) => i % 4 === 3 && v >= threshold);
+      ks = hasBack ? ['front', 'back'] : ['front'];
+      placed = hasBack ? [front, back] : [front];
+      extra.push(`앞뒤 한 장을 턱선(y${chin})에서 나눴어요: 위 = 앞머리, 아래 = 뒷머리(어깨·팔 뒤)`);
+    }
+    if (slot === 'expression' && ks[0] === 'open') {
+      const eyes = kits.male.spec.face.eyes;
+      const aligned = alignSdEyes(placed, threshold, [eyes[0][0], eyes[1][0]]);
+      placed = aligned.frames;
+      if (aligned.dx[0] || aligned.dx[1]) extra.push(`눈 간격을 맞추려고 왼눈 ${aligned.dx[0]}px, 오른눈 ${aligned.dx[1]}px 옮겼어요(감은 눈도 같이)`);
+    }
+    const check = checkSdLayers(kits, slot, placed.map((r, i) => ({ alpha: alphaMask(r, threshold), front: ks[i] !== 'back', eyes: slot === 'expression' && ks[i] === 'open' })), sexes);
+    const badPx = check.problems.reduce((a, p) => a + Math.max(1, p.px), 0);
+    return { ks, fit, placed, extra, check, badPx };
+  };
+
+  const raw = keys.map((k) => canvas.get(k)!.rgba);
+  let best = attempt(raw);
+  let pre: Placement | null = null;
+  // 크게(또는 작게·엉뚱한 자리에) 그린 그림: 기본 맞춤(±5%·±48px)으로 안 맞으면 칸 기준선에 크기·자리를 먼저 잡고 다시 맞춰 본다
+  if (autoFit && best.check.problems.some((p) => p.rule === 'max' || p.rule === 'must' || p.rule === 'nogo')) {
+    const guess = prePlacement(kits, slot, sexes, raw, threshold);
+    if (guess) {
+      const second = attempt(raw.map((r) => placeRgba(r, guess)));
+      if (second.badPx < best.badPx) { best = second; pre = guess; }
+    }
   }
-  if (slot === 'expression' && keys[0] === 'open') {
-    const eyes = kits.male.spec.face.eyes;
-    const aligned = alignSdEyes(placed, threshold, [eyes[0][0], eyes[1][0]]);
-    placed = aligned.frames;
-    if (aligned.dx[0] || aligned.dx[1]) notes.push(`눈 간격을 맞추려고 왼눈 ${aligned.dx[0]}px, 오른눈 ${aligned.dx[1]}px 옮겼어요(감은 눈도 같이)`);
-  }
-  const check = checkSdLayers(kits, slot, placed.map((r, i) => ({ alpha: alphaMask(r, threshold), front: keys[i] !== 'back', eyes: slot === 'expression' && keys[i] === 'open' })), sexes);
+  const { fit, extra, check } = best;
+  keys = best.ks;
+  const placed = best.placed;
+  if (pre) notes.push(`크기·자리가 바디와 많이 달라서 ${pre.why} 기준으로 ${Math.round(pre.s * 1000) / 10}%로 줄이거나 키우고 옮겼어요(관리 페이지 업로드엔 아직 없는 랩 전용 맞춤이라, 앱에 올릴 땐 아래 ⬇ 맞춘 그림을 쓰세요. 많이 줄이면 외곽선이 가늘어져요)`);
+  const moved = fitText(fit);
+  if (moved) notes.push(moved);
+  notes.push(...extra);
   problems.push(...check.problems.map((p) => p.message));
   if (autoFit && check.problems.some((p) => p.rule === 'max' || p.rule === 'nogo' || p.rule === 'must')) {
-    notes.push(`옮기거나 크기를 바꿔도(±${SD_FIT_RANGE.px}px, ±${SD_FIT_RANGE.scale * 100}%) 구역에 다 맞지 않아 그대로 검사했어요. 도안 구역에 맞춰 다시 그려 주세요`);
+    notes.push(`자동으로 옮기고 크기를 바꿔도 구역에 다 맞지 않았어요. 도안 구역에 맞춰 다시 그려 주세요`);
   }
   notes.push(...check.notes);
   const layers: Partial<Record<SdFileKey, Rgba>> = {};
   keys.forEach((k, i) => { layers[k] = placed[i]; });
   return { ok: problems.length === 0, layers, problems, notes, bad: check.bad.some(Boolean) ? check.bad : null, fit };
+}
+
+// ---------- 크게 그린 그림 먼저 자리 잡기(랩 전용) ----------
+/** 새 좌표 = 옛 좌표 * s + (tx, ty) */
+type Placement = { s: number; tx: number; ty: number; why: string };
+
+function placeRgba(rgba: Rgba, p: Placement): Rgba {
+  const src = canvas2d(SD_W, SD_H);
+  src.ctx.putImageData(toImageData(rgba), 0, 0);
+  const dst = canvas2d(SD_W, SD_H);
+  dst.ctx.imageSmoothingEnabled = true;
+  dst.ctx.imageSmoothingQuality = 'high';
+  dst.ctx.drawImage(src.c, p.tx, p.ty, SD_W * p.s, SD_H * p.s);
+  return new Uint8Array(dst.ctx.getImageData(0, 0, SD_W, SD_H).data.buffer);
+}
+
+function bbox(m: Uint8Array): [number, number, number, number] | null {
+  let x0 = SD_W, y0 = SD_H, x1 = -1, y1 = -1;
+  for (let p = 0; p < m.length; p++) if (m[p]) { const x = p % SD_W, y = (p - x) / SD_W; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  return x1 < 0 ? null : [x0, y0, x1, y1];
+}
+/** 한 줄에서 칠해진 맨 왼쪽~맨 오른쪽 */
+function rowSpan(m: Uint8Array, y: number): [number, number] | null {
+  let a = -1, b = -1;
+  for (let x = 0; x < SD_W; x++) if (m[y * SD_W + x]) { if (a < 0) a = x; b = x; }
+  return a < 0 ? null : [a, b];
+}
+
+/**
+ * 칸마다 기준선 하나로 크기·자리를 잡는다(그다음 기본 맞춤이 미세 조정):
+ * 하의 = 그림 맨 위 허리 밴드 폭 → 바디 허리 폭, 허리선에 붙임 / 신발 = 폭 → 발 폭, 바닥선에 붙임
+ * 헤어 = 폭 → 두상 폭, 정수리에 붙임 / 상의·표정 = 그려도 되는 범위 상자 안에 들어가게
+ */
+function prePlacement(kits: SdKits, slot: SdKitSlot, sexes: readonly SdSex[], layers: Rgba[], threshold: number): Placement | null {
+  const k = kits[sexes[0]];
+  const union = new Uint8Array(SD_W * SD_H);
+  for (const r of layers) { const a = alphaMask(r, threshold); for (let p = 0; p < a.length; p++) union[p] |= a[p]; }
+  const b = bbox(union);
+  if (!b) return null;
+  const [x0, y0, x1, y1] = b;
+  const w = x1 - x0 + 1, h = y1 - y0 + 1, cx = (x0 + x1) / 2;
+  const L = k.spec.lines_y;
+  const at = (s: number, ax: number, ay: number, toX: number, toY: number, why: string): Placement => ({ s, tx: toX - ax * s, ty: toY - ay * s, why });
+  if (slot === 'bottom') {
+    const band = rowSpan(union, Math.min(y1, y0 + Math.max(3, Math.round(h * 0.04))));
+    const waist = rowSpan(k.masks['masks/body-torso.png'], L.waist) ?? [413, 586];
+    if (!band) return null;
+    const s = (waist[1] - waist[0] + 14) / (band[1] - band[0] + 1);
+    return at(s, (band[0] + band[1]) / 2, y0, (waist[0] + waist[1]) / 2, L.waist - 15, '허리 밴드 폭');
+  }
+  if (slot === 'shoes') {
+    const feet = bbox(k.masks['masks/body-feet.png']) ?? [419, 872, 582, 917];
+    const s = (feet[2] - feet[0] + 16) / w;
+    return at(s, cx, y1, (feet[0] + feet[2]) / 2, L.ground + 6, '발 폭');
+  }
+  if (slot === 'hair') {
+    const head = bbox(k.masks['masks/body-head.png']) ?? [287, 156, 712, 527];
+    const top = rowSpan(union, Math.min(y1, y0 + Math.round(h * 0.25)));
+    if (!top) return null;
+    const s = ((head[2] - head[0]) * 1.06) / (top[1] - top[0] + 1);
+    return at(s, (top[0] + top[1]) / 2, y0, (head[0] + head[2]) / 2, L.head_top - 8, '두상 폭');
+  }
+  const zone = bbox(k.masks[k.spec.zones[slot].max]);
+  if (!zone) return null;
+  const s = Math.min((zone[2] - zone[0]) / w, (zone[3] - zone[1]) / h) * 0.92;
+  return at(s, cx, y0, (zone[0] + zone[2]) / 2, zone[1] + (zone[3] - zone[1] - h * s) * 0.15, '그려도 되는 범위');
 }
