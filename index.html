@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>duetden 에셋 랩</title>
+<meta name="theme-color" content="#FBF4EC">
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-bg="cream">
+<header>
+  <h1>에셋 랩</h1>
+  <div class="seg"><button id="sex-m">남</button><button id="sex-f">여</button></div>
+</header>
+<main>
+  <div class="stage-wrap">
+    <canvas id="stage" aria-label="캐릭터 미리보기"></canvas>
+    <div class="row" id="views"></div>
+    <div class="row toggles">
+      <label><input type="checkbox" id="showbad"> 문제 위치 빨강</label>
+      <label><input type="checkbox" id="eyes"> 눈 감기</label>
+      <span class="bgs"><button class="dot cream" data-bg="cream" title="앱 배경"></button><button class="dot check" data-bg="check" title="체크무늬"></button><button class="dot dark" data-bg="dark" title="어두운 배경"></button></span>
+    </div>
+  </div>
+  <div class="panel">
+    <div id="remote" class="status loading"></div>
+    <div class="opts">
+      <label><input type="checkbox" id="autofit"> 자동 맞춤(관리 페이지 업로드처럼 바디에 맞춰 옮김)</label>
+      <label><input type="checkbox" id="unisex"> 첨부한 그림을 공용(남녀 둘 다)으로 검사</label>
+      <label class="file wide">📂 이름 규칙대로 여러 파일 한꺼번에<input type="file" id="byname" multiple accept="image/png"></label>
+      <div id="name-errors"></div>
+    </div>
+    <div id="slots"></div>
+    <p class="hint">아이템을 고른 채로 다시 첨부하면 그 그림만 바뀌어요(헤어 앞·뒤는 같은 아이템에 차례로 첨부). 새 아이템으로 따로 보려면 다른 칸을 먼저 고르세요. 첨부한 파일은 이 폰 브라우저 안에서만 쓰이고 어디에도 올라가지 않아요.</p>
+    <p class="hint" id="source"></p>
+  </div>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>

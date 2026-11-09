@@ -1,0 +1,220 @@
+{
+  "sex": "male",
+  "canvas": [
+    1000,
+    1000
+  ],
+  "center_x": 500,
+  "source_scale": 1.0,
+  "ratio": {
+    "head": 1.0,
+    "body": 1.057,
+    "hair_margin_px": 6
+  },
+  "lines_y": {
+    "head_top": 157,
+    "brow": 336,
+    "eye": 428,
+    "mouth": 464,
+    "chin": 526,
+    "collar": 558,
+    "armpit": 581,
+    "nose": 440,
+    "hairline": 247,
+    "ear_top": 410,
+    "chest": 620,
+    "waist": 667,
+    "hip": 715,
+    "crotch": 738,
+    "ankle": 872,
+    "ground": 916
+  },
+  "face": {
+    "head_width": 393,
+    "head_height": 369,
+    "eyes": [
+      [
+        416,
+        428
+      ],
+      [
+        576,
+        428
+      ]
+    ],
+    "nose": [
+      497,
+      440
+    ],
+    "mouth": [
+      500,
+      464
+    ],
+    "expression_zone": {
+      "eyes": [
+        342,
+        368,
+        650,
+        487
+      ],
+      "mouth": [
+        465,
+        443,
+        529,
+        486
+      ]
+    },
+    "hair_nogo_eyes": [
+      [
+        366,
+        392,
+        449,
+        463
+      ],
+      [
+        543,
+        392,
+        626,
+        463
+      ]
+    ],
+    "hair_nogo_box": [
+      366,
+      392,
+      626,
+      463
+    ],
+    "bangs_end": [
+      344,
+      391
+    ]
+  },
+  "underwear_y": {
+    "bottom": [
+      679,
+      739
+    ]
+  },
+  "nipples": [
+    [
+      464,
+      594
+    ],
+    [
+      534,
+      594
+    ]
+  ],
+  "nipple_margin": 10,
+  "wrist_px": 16,
+  "body_bbox": [
+    287,
+    157,
+    710,
+    916
+  ],
+  "parts_bbox": {
+    "head": [
+      287,
+      157,
+      710,
+      526
+    ],
+    "neck": [
+      409,
+      527,
+      588,
+      564
+    ],
+    "torso": [
+      418,
+      558,
+      580,
+      737
+    ],
+    "arms": [
+      309,
+      558,
+      687,
+      747
+    ],
+    "hands": [
+      315,
+      632,
+      682,
+      697
+    ],
+    "legs": [
+      418,
+      738,
+      580,
+      871
+    ],
+    "feet": [
+      419,
+      872,
+      580,
+      916
+    ]
+  },
+  "expand_px": {
+    "top": 30,
+    "bottom": 50,
+    "hair": 6,
+    "hair_half_width": 300,
+    "hair_below_crotch": 20,
+    "top_below_crotch": 50
+  },
+  "layer_order": [
+    "hair_back",
+    "body",
+    "expression",
+    "shoes",
+    "bottom",
+    "top",
+    "hair_front"
+  ],
+  "zones": {
+    "hair": {
+      "max": "masks/hair_max.png",
+      "must": "masks/hair_must.png",
+      "nogo": "masks/hair_nogo.png",
+      "hairline_cap": "masks/hairline_cap.png"
+    },
+    "expression": {
+      "max": "masks/expr_max.png"
+    },
+    "top": {
+      "max": "masks/top_max.png",
+      "must": "masks/top_must.png",
+      "nogo": "masks/clothes_nogo.png",
+      "side_runs": [
+        "torso",
+        "arms",
+        "legs"
+      ],
+      "gap_runs": [
+        "arms"
+      ],
+      "gap_until": 631,
+      "touch_tolerance_px": 30
+    },
+    "bottom": {
+      "max": "masks/bottom_max.png",
+      "must": "masks/bottom_must.png",
+      "nogo": "masks/clothes_nogo.png",
+      "side_runs": [
+        "torso",
+        "legs"
+      ]
+    },
+    "shoes": {
+      "max": "masks/shoes_max.png",
+      "must": "masks/shoes_must.png",
+      "side_runs": [
+        "feet"
+      ]
+    }
+  },
+  "alpha_threshold": 16
+}

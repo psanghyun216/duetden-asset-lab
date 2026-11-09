@@ -1,0 +1,18 @@
+{
+  "name": "duetden-asset-lab",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc",
+    "sync": "scripts/sync-from-app.sh"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "esbuild": "^0.24.2",
+    "typescript": "^5.6.3"
+  },
+  "private": true,
+  "type": "module"
+}
