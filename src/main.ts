@@ -277,7 +277,7 @@ function render() {
     const detail = ups.map((u) => {
       const res = u.result;
       const lines = u.busy ? '<div class="note">맞추고 검사하는 중…</div>' : res ? [
-        `<div class="${res.ok ? 'good' : 'bad'}">${res.ok ? '✅ 통과(관리 페이지에 올려도 돼요)' : '❌ 불통과(관리 페이지에서 막혀요)'}</div>`,
+        `<div class="${res.ok ? 'good' : 'bad'}">${res.ok ? '✅ 통과' : '❌ 불통과'}</div>`,
         ...res.problems.map((p) => `<div class="bad">· ${esc(p)}</div>`),
         ...res.notes.map((n) => `<div class="note">· ${esc(n)}</div>`),
         `<div class="dl">${Object.keys(u.drawables).map((k) => `<button class="mini" data-dl="${u.id}" data-key="${k}">⬇ ${esc(sdFileName(u.slot, u.fileId, k as SdFileKey, u.sex))}</button>`).join('')}<button class="mini danger" data-del="${u.id}">지우기</button></div>`,

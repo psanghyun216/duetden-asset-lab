@@ -99,17 +99,46 @@ export async function loadKits(base: string): Promise<SdKits> {
   const read = async (sex: (typeof SD_SEXES)[number]): Promise<SdKit> => {
     const spec = (await (await fetch(`${base}/${sex}/spec.json`)).json()) as SdKitSpec;
     const masks: Record<string, Uint8Array> = {};
-    await Promise.all(sdKitMaskNames(spec).map(async (rel) => {
+    await Promise.all([...new Set([...sdKitMaskNames(spec), 'masks/body-hands.png'])].map(async (rel) => {
       const { data, w, h } = await decode(await (await fetch(`${base}/${sex}/${rel}`)).blob());
       if (w !== SD_W || h !== SD_H) throw new Error(`kit ${sex}/${rel}: ${SD_W}x${SD_H} 이어야 해요`);
       const m = new Uint8Array(SD_W * SD_H);
       for (let p = 0; p < m.length; p++) m[p] = data[p * 4] > 127 ? 1 : 0;
       masks[rel] = m;
     }));
+    widenBottom(spec, masks);
     return { sex, spec, masks };
   };
   const [male, female] = await Promise.all([read('male'), read('female')]);
   return { male, female };
+}
+
+/**
+ * 랩 규칙(2026-11-09 사용자): 하의는 옆으로 퍼지는 건 괜찮고 손만 가리면 안 된다.
+ * 하의 '그려도 되는 범위'를 원래 위아래 길이 안에서 가로로 끝까지 넓히고, 손(+여유 6px)만 뺀다. 앱 키트에는 아직 없음.
+ */
+export const LAB_HAND_MARGIN = 6;
+function widenBottom(spec: SdKitSpec, masks: Record<string, Uint8Array>) {
+  const rel = spec.zones.bottom?.max;
+  const max = rel ? masks[rel] : undefined;
+  const hands = masks['masks/body-hands.png'];
+  if (!max || !hands) return;
+  let y0 = SD_H, y1 = -1;
+  for (let p = 0; p < max.length; p++) if (max[p]) { const y = (p / SD_W) | 0; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  const out = new Uint8Array(max.length);
+  for (let y = y0; y <= y1; y++) out.fill(1, y * SD_W, (y + 1) * SD_W);
+  const m = LAB_HAND_MARGIN;
+  for (let p = 0; p < hands.length; p++) {
+    if (!hands[p]) continue;
+    const x = p % SD_W, y = (p - x) / SD_W;
+    for (let dy = -m; dy <= m; dy++) for (let dx = -m; dx <= m; dx++) {
+      const qx = x + dx, qy = y + dy;
+      if (qx >= 0 && qy >= 0 && qx < SD_W && qy < SD_H && dx * dx + dy * dy <= m * m) out[qy * SD_W + qx] = 0;
+    }
+  }
+  // 범위 마스크는 하의 칸만 쓰므로 새 이름으로 바꿔 끼운다(다른 칸은 영향 없음)
+  masks['lab/bottom_max.png'] = out;
+  spec.zones.bottom = { ...spec.zones.bottom, max: 'lab/bottom_max.png' };
 }
 
 export type ImportResult = {
