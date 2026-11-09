@@ -51,3 +51,4 @@ body.dragging .slot, body.dragging .file { outline:2px dashed #f0b8a8; outline-o
   #stage { height:calc(100vh - 190px); width:auto; max-width:100%; }
   #slots { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 }
+.fix { margin-top:6px; border:0; background:var(--accent); color:#fff; font-weight:700; border-radius:10px; padding:9px 12px; font-size:14px; }

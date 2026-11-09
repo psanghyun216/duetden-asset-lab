@@ -46,6 +46,8 @@ type Upload = {
   files: Partial<Record<SdFileKey, File>>;
   result: ImportResult | null;
   busy: boolean;
+  /** 조절하기를 눌렀나(넓게 찾기 + 손 덮은 부분 자르기). 파일을 바꾸면 꺼진다 */
+  adjust: boolean;
   drawables: Partial<Record<SdFileKey, HTMLCanvasElement>>;
   badCanvas: HTMLCanvasElement | null;
 };
@@ -177,7 +179,7 @@ async function runImport(u: Upload) {
   render();
   await new Promise((r) => setTimeout(r, 30));
   try {
-    const res = await importItem(state.kits, u.slot, u.sex, u.files, state.autoFit);
+    const res = await importItem(state.kits, u.slot, u.sex, u.files, state.autoFit, u.adjust);
     u.result = res;
     u.drawables = {};
     for (const [k, rgba] of Object.entries(res.layers)) if (rgba) u.drawables[k as SdFileKey] = toCanvas(rgba);
@@ -197,12 +199,13 @@ function wear(slot: SdSlot, id: string) {
 }
 
 function newUpload(slot: SdSlot, sex: SdItemSex, fileId: string): Upload {
-  const u: Upload = { id: `up${++uploadSeq}`, fileId, slot, sex, files: {}, result: null, busy: false, drawables: {}, badCanvas: null };
+  const u: Upload = { id: `up${++uploadSeq}`, fileId, slot, sex, files: {}, result: null, busy: false, adjust: false, drawables: {}, badCanvas: null };
   state.uploads.push(u);
   return u;
 }
 
 function setFile(u: Upload, key: SdFileKey, file: File) {
+  u.adjust = false;
   if (key === 'whole') { delete u.files.front; delete u.files.back; }
   if (key === 'front' || key === 'back') delete u.files.whole;
   u.files[key] = file;
@@ -294,6 +297,8 @@ function render() {
         ...res.problems.map((p) => `<div class="bad">· ${esc(p)}</div>`),
         ...res.notes.map((n) => `<div class="note">· ${esc(n)}</div>`),
         `<div class="dl">${Object.keys(u.drawables).map((k) => `<button class="mini" data-dl="${u.id}" data-key="${k}">⬇ ${esc(sdFileName(u.slot, u.fileId, k as SdFileKey, u.sex))}</button>`).join('')}<button class="mini danger" data-del="${u.id}">지우기</button></div>`,
+        !res.ok && !u.adjust ? `<button class="fix" data-adjust="${u.id}">🔧 조절하기 · 최적으로 맞춰 보기</button>` : '',
+        u.adjust ? `<button class="mini" data-unadjust="${u.id}">↩ 조절 전으로</button>` : '',
       ].join('') : '';
       return `<div class="result">${lines}</div>`;
     }).join('');
@@ -311,6 +316,11 @@ document.addEventListener('click', (e) => {
   if (t.dataset.bg) { state.bg = t.dataset.bg; render(); return; }
   if (t.dataset.slot !== undefined && t.dataset.id !== undefined) { wear(t.dataset.slot as SdSlot, t.dataset.id); render(); return; }
   if (t.dataset.dl) { const u = state.uploads.find((x) => x.id === t.dataset.dl); if (u) download(u, t.dataset.key as SdFileKey); return; }
+  if (t.dataset.adjust || t.dataset.unadjust) {
+    const u = state.uploads.find((x) => x.id === (t.dataset.adjust ?? t.dataset.unadjust));
+    if (u) { u.adjust = !!t.dataset.adjust; void runImport(u); }
+    return;
+  }
   if (t.dataset.del) {
     const u = state.uploads.find((x) => x.id === t.dataset.del);
     if (u) { state.uploads = state.uploads.filter((x) => x !== u); wear(u.slot, ''); render(); }

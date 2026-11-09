@@ -210,7 +210,7 @@ const KEY_LABEL: Record<SdFileKey, string> = { whole: '헤어 한 장', front: '
  * 아이템 하나(헤어 앞+뒤 / 한 장, 표정 뜬 눈+감은 눈, 옷 한 장)를 서버 업로드와 같은 순서로 처리한다.
  * autoFit=false 면 옮기지 않고 그대로 검사한다(그린 자리 그대로 보기).
  */
-export async function importItem(kits: SdKits, slot: SdKitSlot, sex: SdItemSex, files: Partial<Record<SdFileKey, Blob>>, autoFit: boolean): Promise<ImportResult> {
+export async function importItem(kits: SdKits, slot: SdKitSlot, sex: SdItemSex, files: Partial<Record<SdFileKey, Blob>>, autoFit: boolean, adjust = false): Promise<ImportResult> {
   const threshold = kits.male.spec.alpha_threshold;
   const sexes = sdCheckSexes(sex);
   const problems: string[] = [];
@@ -264,10 +264,19 @@ export async function importItem(kits: SdKits, slot: SdKitSlot, sex: SdItemSex, 
       if (second.badPx < best.badPx) { best = second; pre = guess; }
     }
   }
+  if (adjust) {
+    // 조절하기(그림은 자르지 않고 크기·위치만): 크기 50~160%·자리 ±160px 를 표본 점으로 훑어 점수 좋은 후보 몇 개를 고르고,
+    // 후보마다 진짜 검사(몸 폭·소매 틈 포함)를 돌려 문제 픽셀이 가장 적은 자리를 쓴다
+    for (const cand of wideSearch(kits, slot, sexes, raw, threshold)) {
+      const other = attempt(raw.map((r) => placeRgba(r, cand)));
+      if (other.badPx < best.badPx) { best = other; pre = cand; }
+    }
+  }
   const { fit, extra, check } = best;
   keys = best.ks;
   const placed = best.placed;
-  if (pre) notes.push(`크기·자리가 바디와 많이 달라서 ${pre.why} 기준으로 ${Math.round(pre.s * 1000) / 10}%로 줄이거나 키우고 옮겼어요(관리 페이지 업로드엔 아직 없는 랩 전용 맞춤이라, 앱에 올릴 땐 아래 ⬇ 맞춘 그림을 쓰세요. 많이 줄이면 외곽선이 가늘어져요)`);
+  if (adjust) notes.push(`🔧 조절하기: ${pre ? `크기 ${Math.round(pre.s * 1000) / 10}%로 바꾸고 자리를 옮겼어요(그림은 자르지 않음)` : '크기·위치를 바꿔도 지금 자리가 가장 잘 맞아요'}`);
+  if (pre && !adjust) notes.push(`크기·자리가 바디와 많이 달라서 ${pre.why} 기준으로 ${Math.round(pre.s * 1000) / 10}%로 줄이거나 키우고 옮겼어요(관리 페이지 업로드엔 아직 없는 랩 전용 맞춤이라, 앱에 올릴 땐 아래 ⬇ 맞춘 그림을 쓰세요. 많이 줄이면 외곽선이 가늘어져요)`);
   const moved = fitText(fit);
   if (moved) notes.push(moved);
   notes.push(...extra);
@@ -279,6 +288,63 @@ export async function importItem(kits: SdKits, slot: SdKitSlot, sex: SdItemSex, 
   const layers: Partial<Record<SdFileKey, Rgba>> = {};
   keys.forEach((k, i) => { layers[k] = placed[i]; });
   return { ok: problems.length === 0, layers, problems, notes, bad: check.bad.some(Boolean) ? check.bad : null, fit };
+}
+
+// ---------- 조절하기(랩 전용) ----------
+/**
+ * 넓게 찾기(크기 50~160%, 자리 ±160px): 그림 점(5px 간격)을 옮기고 키워 보며 점수(범위 밖 + 손·금지 x3 + 반드시 덮을 곳 빈칸)가 가장 낮은 자리.
+ * 거칠게(크기 4%·자리 10px) 훑은 뒤 그 둘레를 촘촘히(1%·2px) 다시 본다.
+ */
+function wideSearch(kits: SdKits, slot: SdKitSlot, sexes: readonly SdSex[], layers: Rgba[], threshold: number): Placement[] {
+  const st = 5;
+  const union = new Uint8Array(SD_W * SD_H);
+  for (const r of layers) { const a = alphaMask(r, threshold); for (let p = 0; p < a.length; p++) union[p] |= a[p]; }
+  const b = bbox(union);
+  if (!b) return [];
+  const pts: number[] = [];
+  for (let y = b[1]; y <= b[3]; y += st) for (let x = b[0]; x <= b[2]; x += st) if (union[y * SD_W + x]) pts.push(x, y);
+  const zones = sexes.map((x) => { const k = kits[x]; const z = k.spec.zones[slot]; return { max: k.masks[z.max], nogo: z.nogo ? k.masks[z.nogo] : null, must: z.must ? k.masks[z.must] : null }; });
+  const mustPts = zones.map((z) => { const m: number[] = []; if (z.must) for (let y = 0; y < SD_H; y += st) for (let x = 0; x < SD_W; x += st) if (z.must[y * SD_W + x]) m.push(x, y); return m; });
+  const zb = bbox(zones[0].max);
+  if (!zb) return [];
+  const cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
+  const score = (s: number, tx: number, ty: number) => {
+    let t = 0;
+    zones.forEach((z, zi) => {
+      for (let i = 0; i < pts.length; i += 2) {
+        const x = Math.round(pts[i] * s + tx), y = Math.round(pts[i + 1] * s + ty);
+        if (x < 0 || y < 0 || x >= SD_W || y >= SD_H) { t++; continue; }
+        const p = y * SD_W + x;
+        if (!z.max[p]) t++;
+        if (z.nogo && z.nogo[p]) t += 3;
+      }
+      const m = mustPts[zi];
+      for (let i = 0; i < m.length; i += 2) {
+        const u = Math.round((m[i] - tx) / s), v = Math.round((m[i + 1] - ty) / s);
+        if (u < 0 || v < 0 || u >= SD_W || v >= SD_H || !union[v * SD_W + u]) t++;
+      }
+    });
+    return t;
+  };
+  type C = { v: number; s: number; tx: number; ty: number };
+  const at = (s: number, ncx: number, ncy: number): C => { const tx = ncx - cx * s, ty = ncy - cy * s; return { v: score(s, tx, ty) + Math.abs(s - 1) * 0.5, s, tx, ty }; };
+  const zcx = (zb[0] + zb[2]) / 2, zcy = (zb[1] + zb[3]) / 2;
+  const coarse: C[] = [];
+  for (let s = 0.5; s <= 1.6001; s += 0.04) for (let dy = -160; dy <= 160; dy += 10) for (let dx = -160; dx <= 160; dx += 10) coarse.push(at(s, zcx + dx, zcy + dy));
+  coarse.sort((a, b) => a.v - b.v);
+  // 서로 다른 후보(크기 0.06·자리 20px 넘게 차이) 6개를 촘촘히 다듬는다
+  const seeds: C[] = [];
+  for (const c of coarse) {
+    if (seeds.length >= 6) break;
+    const ccx = cx * c.s + c.tx, ccy = cy * c.s + c.ty;
+    if (seeds.every((d) => Math.abs(d.s - c.s) > 0.06 || Math.hypot(cx * d.s + d.tx - ccx, cy * d.s + d.ty - ccy) > 20)) seeds.push(c);
+  }
+  return seeds.map((c0) => {
+    let best = c0;
+    const ccx = cx * c0.s + c0.tx, ccy = cy * c0.s + c0.ty;
+    for (let s = c0.s - 0.04; s <= c0.s + 0.0401; s += 0.01) for (let dy = -10; dy <= 10; dy += 2) for (let dx = -10; dx <= 10; dx += 2) { const c = at(s, ccx + dx, ccy + dy); if (c.v < best.v) best = c; }
+    return { s: best.s, tx: Math.round(best.tx), ty: Math.round(best.ty), why: '넓게 찾기' };
+  });
 }
 
 // ---------- 크게 그린 그림 먼저 자리 잡기(랩 전용) ----------
