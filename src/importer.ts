@@ -241,7 +241,8 @@ export async function importItem(kits: SdKits, slot: SdKitSlot, sex: SdItemSex, 
       extra.push(`앞뒤 한 장을 턱선(y${chin})에서 나눴어요: 위 = 앞머리, 아래 = 뒷머리(어깨·팔 뒤)`);
     }
     if (slot === 'expression' && ks[0] === 'open') {
-      const eyes = kits.male.spec.face.eyes;
+      // 그 성별 키트의 기본 눈 자리(공용은 첫 성별), 앱 importer 와 같음
+    const eyes = kits[sexes[0]].spec.face.eyes;
       const aligned = alignSdEyes(placed, threshold, [eyes[0][0], eyes[1][0]]);
       placed = aligned.frames;
       if (aligned.dx[0] || aligned.dx[1]) extra.push(`눈 간격을 맞추려고 왼눈 ${aligned.dx[0]}px, 오른눈 ${aligned.dx[1]}px 옮겼어요(감은 눈도 같이)`);

@@ -67,21 +67,32 @@ export const SD_BUNDLED: SdCatalogData = {
   "defaults": {
     "male": {
       "hair": null,
-      "expression": null,
+      "expression": "roundeye01",
       "top": null,
       "bottom": null,
       "shoes": null
     },
     "female": {
       "hair": null,
-      "expression": null,
+      "expression": "lasheye01",
       "top": null,
       "bottom": null,
       "shoes": null
     }
   },
   "hair": {},
-  "expression": {},
+  "expression": {
+    "roundeye01": {
+      "name": "기본 눈",
+      "sex": "male",
+      "open": "expr_roundeye01_m.png"
+    },
+    "lasheye01": {
+      "name": "기본 눈",
+      "sex": "female",
+      "open": "expr_lasheye01_f.png"
+    }
+  },
   "top": {},
   "bottom": {},
   "shoes": {},
@@ -97,6 +108,18 @@ export const SD_BUNDLED: SdCatalogData = {
       "y": 150,
       "w": 438,
       "h": 774
+    },
+    "expr_lasheye01_f.png": {
+      "x": 346,
+      "y": 386,
+      "w": 302,
+      "h": 86
+    },
+    "expr_roundeye01_m.png": {
+      "x": 360,
+      "y": 384,
+      "w": 272,
+      "h": 88
     }
   }
 };

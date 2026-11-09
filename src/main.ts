@@ -10,7 +10,8 @@ import { PR73 } from './pr73.ts';
 // ---------- 설정 ----------
 const params = new URLSearchParams(location.search);
 const API = (params.get('api') ?? 'https://api.duetden.com').replace(/\/$/, '');
-const BODY_FILES: Record<string, string> = { 'body_m.png': 'app-assets/body_m.webp', 'body_f.png': 'app-assets/body_f.webp' };
+/** 앱에 묶인 그림(catalog.generated.ts 의 .png 이름) → 랩에 복사한 webp(sync-from-app.sh, 앱 번들과 같은 파일) */
+const BODY_FILES: Record<string, string> = Object.fromEntries(Object.keys(SD_BUNDLED.rects).map((f) => [f, `app-assets/${f.replace(/\.png$/, '.webp')}`]));
 
 const SLOT_LABEL: Record<SdSlot, string> = { hair: '헤어', expression: '표정', top: '상의', bottom: '하의', shoes: '신발' };
 const SLOT_KEYS: Record<SdSlot, { key: SdFileKey; label: string }[]> = {

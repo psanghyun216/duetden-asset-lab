@@ -252,7 +252,7 @@ export function checkSdLayers(kits: SdKits, slot: SdKitSlot, layers: readonly Sd
       else if (c) notes.push(`[${KO_SEX[sex]}] ${rule === 'side' ? '밑단 근처' : '소매 안쪽'} 미세 차이 ${c}px (허용 ${tol}px 이내)`);
     }
   }
-  // 표정 뜬 눈: 두 눈 가운데가 키트 기준 자리(spec face.eyes, 남녀 같은 얼굴)에 있어야 표정마다 눈 간격이 같다
+  // 표정 뜬 눈: 두 눈 가운데가 그 성별 키트 기준 자리(spec face.eyes = 기본 눈 표정의 두 눈 가운데, 공용은 첫 성별)에 있어야 표정마다 눈 간격이 같다
   const eyeTargets = kits[sexes[0]].spec.face.eyes.map((e) => e[0]);
   for (const l of layers) {
     if (!l.eyes) continue;
